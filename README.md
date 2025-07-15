@@ -87,29 +87,8 @@ RD2ESCODE employs a sophisticated multi-agent collaborative framework consisting
 | Simulation Testing | ✅ | ✅ | ✅ | ✅ |
 | Configuration Type | Interface-only | Interface-only | Model-driven | Natural Language |
 
-## 🚀 Getting Started
 
-### Prerequisites
-- Proteus 8 simulation software
-- Keil uVision5 embedded code compilation software
-- Access to Claude 4 Sonnet API
 
-### Installation
-```bash
-git clone https://github.com/Hongbin-Xiao/RD2ESCODE.git
-cd RD2ESCODE
-
-# Setup Backend (aiDjangoProject)
-cd aiDjangoProject
-pip install -r requirements.txt
-python manage.py migrate
-python manage.py runserver
-
-# Setup Frontend (project)
-cd ../project
-npm install
-npm start
-```
 
 ### Usage
 1. Prepare your requirements document in natural language
