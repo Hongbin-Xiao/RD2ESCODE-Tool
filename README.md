@@ -46,7 +46,7 @@ RD2ESCODE employs a sophisticated multi-agent collaborative framework consisting
 ## 🔄 Workflow
 
 
-<img width="2046" height="735" alt="2" src="https://github.com/user-attachments/assets/3950c2b7-d317-4751-a393-694064a57641" />
+
 ### Step 1: Initial Code Generation and Compilation Optimization
 - User provides reference code and requirement documents
 - Initial code generation based on requirements
@@ -63,6 +63,9 @@ RD2ESCODE employs a sophisticated multi-agent collaborative framework consisting
 - Code quality analysis using multi-style reference codes
 - Implementation of correction recommendations
 - Final compilation optimization loop
+
+<img width="2046" height="735" alt="2" src="https://github.com/user-attachments/assets/3950c2b7-d317-4751-a393-694064a57641" />
+
 
 ## 📊 Performance Metrics
 
