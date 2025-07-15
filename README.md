@@ -118,28 +118,6 @@ This tool addresses key challenges in embedded systems development:
 - Time-consuming manual code adaptation
 - Difficulty in leveraging existing codebases
 
-## 🤝 Contributing
-
-We welcome contributions to improve RD2ESCODE! Please see our contribution guidelines in the repository.
-
-## 📄 Citation
-
-If you use RD2ESCODE in your research, please cite:
-
-```bibtex
-@article{tan2024rd2escode,
-title={RD2ESCODE: Automated Transformation of Requirements Documents into Embedded System Code Tool},
-author={Tan, Shuru and Xiao, Hongbin and Li, Zhi and Xie, Xiaolan and Wu, Tianhao and Tang, Fei},
-journal={ASE Tool Demo},
-year={2024}
-}
-```
-
-## 📞 Contact
-
-- **Email**: zhili@gxnu.edu.cn, xie_xiao_lan@foxmail.com
-- **GitHub**: [RD2ESCODE Repository](https://github.com/Hongbin-Xiao/RD2ESCODE)
-- **Demo Video**: [YouTube](https://youtu.be/5dz5B-s-TAU)
 
 ## 🏛️ Affiliations
 
