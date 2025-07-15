@@ -1,0 +1,130 @@
+# PM2.5 Monitoring System Requirements Document
+
+## 1. System Overview
+
+This system is based on the 51 microcontroller and is designed to monitor the PM2.5 concentration in the environment in real time, displaying data, alarm thresholds, and status via an LCD. Core functions include:
+
+- **PM2.5 Concentration Detection:** Uses ADC0832 to collect analog signals from the sensor and convert them into digital values (0-255).
+- **Real-time Display:** LCD1602 displays the current PM2.5 concentration (“PM2.5: XXX ug/m³”) and alarm threshold (“ALARM: XXX ug/m³”) on two lines.
+- **Threshold Alarm:** When PM2.5 concentration exceeds the preset threshold, the system triggers the buzzer, relay (to control external devices), and LED indicator.
+- **User Interaction:** Users can set the alarm threshold via buttons, supporting both increase and decrease operations.
+
+## 2. Detailed Functional Requirements
+
+### 2.1 Sensor Module
+
+**ADC0832**
+
+- **Function:** 8-bit ADC chip used to collect analog signals from the PM2.5 sensor and output a raw value ranging from 0 to 255.
+- **Conversion Formula:**
+  - `DA = adc0832(0);` // Read the raw value from channel 0
+
+### 2.2 Display Module (LCD1602)
+
+- **Display Content:**
+  - First line: Real-time PM2.5 concentration (format: PM2.5: XXX ug/m³)
+  - Second line: Alarm threshold (format: ALARM: XXX ug/m³)
+- **Display Control:**
+  - Supports dynamic value update, screen clearing, and cursor control (cursor shown in setting mode)
+
+### 2.3 Button Module
+
+**Button Definitions:**
+
+- **SET_KEY (P3^4):** Function key, switches between normal and setting modes.
+- **ADD_KEY (P3^5):** Increment key, increases threshold by 10 in setting mode.
+- **SUB_KEY (P3^6):** Decrement key, decreases threshold by 10 in setting mode.
+
+**Operation Flow:**
+
+- Press SET_KEY to enter setting mode, LCD shows the cursor, and the buzzer beeps briefly.
+- Adjust the threshold via ADD_KEY/SUB_KEY (range: 0-255 ug/m³).
+- Press SET_KEY again to save and exit setting mode.
+
+### 2.4 Alarm Module
+
+**Trigger Condition:**
+
+- PM2.5 concentration ≥ alarm threshold (WARNING, default: 200 ug/m³)
+
+**Response Actions:**
+
+- **Buzzer (BUZZ = P3^7):** Sounds at 1Hz frequency.
+- **LED Indicators:**
+  - **Red LED (LED_RED = P2^2):** Lights up when concentration exceeds threshold.
+  - **Yellow LED (LED_YELLOW = P2^1):** Lights up when concentration is between 50%-100% of threshold.
+  - **Green LED (LED_GREEN = P2^0):** Lights up when concentration is below 50% of threshold.
+- **Relay (jdq = P2^4):** Closes when concentration exceeds threshold (active low).
+
+## 3. Pin Definitions
+
+| Peripheral Module | Pin Definition      | Function Description                  |
+|-------------------|--------------------|---------------------------------------|
+| LCD1602           | RS = P2^7          | Register select (instruction/data)    |
+|                   | RW = P2^5          | Read/Write control (low for write)    |
+|                   | E = P2^6           | Enable signal                         |
+|                   | Data bus = P0      | 8-bit parallel data                   |
+| ADC0832           | CS = P1^3          | Chip select signal                    |
+|                   | Clk = P1^0         | Clock signal                          |
+|                   | DATI/DATO = P1^1   | Data input/output line                |
+| Buttons           | SET_KEY = P3^4     | Function key (mode switch)            |
+|                   | ADD_KEY = P3^5     | Increment key                         |
+|                   | SUB_KEY = P3^6     | Decrement key                         |
+| Alarm Devices     | BUZZ = P3^7        | Buzzer control                        |
+|                   | LED_RED = P2^2     | Red LED                               |
+|                   | LED_YELLOW = P2^1  | Yellow LED                            |
+|                   | LED_GREEN = P2^0   | Green LED                             |
+|                   | jdq = P2^4         | Relay control                         |
+
+## 4. Functional Verification
+
+### 4.1 Display Function Verification
+
+**Test Steps:**
+
+- After power-on, check if the LCD displays the initial interface (PM2.5: 0 ug/m³, ALARM: 200 ug/m³).
+- Use a PM2.5 simulator to verify that the real-time concentration value updates (e.g., PM2.5: 150 ug/m³).
+
+**Expected Results:**  
+The LCD correctly displays real-time data and threshold, with no garbled text.
+
+### 4.2 Button Function Verification
+
+**Test Steps:**
+
+- Press SET_KEY to enter setting mode and check if the LCD cursor appears.
+- Press ADD_KEY to adjust the threshold from 200 to 220 and check if the second line updates to ALARM: 220 ug/m³.
+- Press SUB_KEY to adjust the threshold back to 200, confirm saving, and exit setting mode.
+
+**Expected Results:**  
+Threshold adjustment is accurate and takes effect after saving.
+
+### 4.3 Alarm Function Verification
+
+**Test Steps:**
+
+- Set the threshold to 100 ug/m³ and artificially increase PM2.5 concentration to 150 ug/m³.
+- Check if the red LED lights up, buzzer sounds, and relay closes.
+- Reduce the concentration to 80 ug/m³, check if the yellow LED lights up, and alarm stops.
+
+**Expected Results:**  
+Alarm triggering and stopping logic is correct, and all devices respond normally.
+
+## 5. Value or Formula Calculation Functions
+
+### 5.1 PM2.5 Concentration Conversion
+
+**Code Snippet (dht.c):**
+
+```
+DA = adc0832(0); // Read ADC raw value (0-255)
+```
+
+**Formula Description:**
+
+Assume a nonlinear relationship between the ADC raw value and PM2.5 concentration; the current formula is empirically calibrated (should be adjusted based on sensor specifications).
+
+**Notes:**
+
+- The ADC conversion formula should be recalibrated according to the actual sensor output characteristics; it is recommended to use a standard PM2.5 measuring device for calibration.
+- The relay control logic (jdq=0 means closed) should match the actual hardware circuit.

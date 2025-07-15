@@ -1,0 +1,388 @@
+#include <reg52.h>
+#include <intrins.h>
+#include <absacc.h>
+#include <math.h>
+#include "0832.h"
+
+#define uchar unsigned char
+#define uint unsigned int
+
+// Define LCD1602 ports
+sbit E = P2^6;       // 1602 enable pin
+sbit RS = P2^7;      // 1602 data/command select pin
+sbit RW = P2^5;
+
+sbit LED_RED = P2^2;
+sbit LED_YELLOW = P2^1;
+sbit LED_GREEN = P2^0;
+sbit SET_KEY = P3^4;
+sbit ADD_KEY = P3^5;
+sbit SUB_KEY = P3^6;
+sbit BUZZ = P3^7;
+sbit RELAY = P2^4;
+
+int WARNING = 250;
+uint DA;
+bit FlagStartRH = 0;
+bit flag_Alarm = 0;
+bit setting_mode = 0;
+void L1602_string(uchar row, uchar col, uchar *p);
+
+// Timer0 initialization
+void Timer0_Init()
+{
+    ET0 = 1;        // Enable Timer0 interrupt
+    TMOD = 0x11;    // Timer mode selection
+    TL0 = 0xb0;
+    TH0 = 0x3c;     // Timer initial value
+    TR0 = 1;        // Start Timer0
+    TL1 = 0xb0;
+    TH1 = 0x3c;     // Timer initial value
+    ET1 = 1;
+    TR1 = 1;
+}
+
+// Timer0 interrupt
+void Timer0_ISR (void) interrupt 1 using 0
+{
+    uchar RHCounter;
+    TL0 = 0xb0;
+    TH0 = 0x3c;     // Timer initial value
+    RHCounter++;
+    // Start PM2.5 conversion every 2 seconds
+    if (RHCounter >= 20)
+    {
+       FlagStartRH = 1;
+       RHCounter = 0;
+    }
+}
+// Timer1 interrupt
+void Timer1_ISR (void) interrupt 3
+{
+    uchar RHCounter1;
+    TL1 = 0xb0;
+    TH1 = 0x3c;     // Timer initial value
+    RHCounter1++;
+    if(RHCounter1 >= 10)
+    {
+        RHCounter1 = 0;
+        if(flag_Alarm == 1)
+            BUZZ = !BUZZ;
+        else
+            BUZZ = 1;
+    }
+}
+
+/********************************************************************
+* Filename  : LCD1602_Display.c
+* Description: This program implements the control of LCD1602.
+***********************************************************************/
+
+/********************************************************************
+* Name : delay()
+* Function : Delay, the delay time is about 140us.
+* Input : None
+* Output : None
+***********************************************************************/
+void delay()
+{
+    int i, j;
+    for(i = 0; i <= 10; i++)
+        for(j = 0; j <= 2; j++);
+}
+
+void delay_ms(uint ms)
+{
+    uint i, j;
+    for(i = 0; i < ms; i++)
+        for(j = 0; j < 110; j++);
+}
+
+/********************************************************************
+* Name : enable(uchar del)
+* Function : 1602 command function
+* Input : Command value
+* Output : None
+***********************************************************************/
+void enable(uchar del)
+{
+    P0 = del;
+    RS = 0;
+    E = 1;
+    delay();
+    E = 0;
+    delay();
+}
+
+/********************************************************************
+* Name : write(uchar del)
+* Function : 1602 write data function
+* Input : Data to write to 1602
+* Output : None
+***********************************************************************/
+void write(uchar del)
+{
+    P0 = del;
+    RS = 1;
+    E = 1;
+    delay();
+    E = 0;
+    delay();
+}
+
+/********************************************************************
+* Name : L1602_init()
+* Function : 1602 initialization, refer to 1602 datasheet
+* Input : None
+* Output : None
+***********************************************************************/
+void L1602_init(void)
+{
+    enable(0x38);
+    enable(0x0c);
+    enable(0x06);
+    enable(0x01); // Clear screen should be last
+    enable(0x80);
+    L1602_string(1, 1, " PM2.5:   0ug/m3");
+    L1602_string(2, 1, " ALARM: 250ug/m3");
+}
+
+/********************************************************************
+* Name : L1602_char(uchar row, uchar col, char sign)
+* Function : Change a specific character on LCD. For example,
+*            to display 'b' at row 1, column 5, call:
+*            L1602_char(1, 5, 'b')
+* Input : row, column, data to display
+* Output : None
+***********************************************************************/
+void L1602_char(uchar row, uchar col, char sign)
+{
+    uchar a;
+    if(row == 1) a = 0x80;
+    if(row == 2) a = 0xc0;
+    a = a + col - 1;
+    enable(a);
+    write(sign);
+}
+
+/********************************************************************
+* Name : L1602_string(uchar row, uchar col, uchar *p)
+* Function : Display a string starting at the given position.
+*            For example, to display "ab cd ef;" from row 1, col 5:
+*            L1602_string(1, 5, "ab cd ef;")
+* Input : row, column, string pointer
+* Output : None
+***********************************************************************/
+void L1602_string(uchar row, uchar col, uchar *p)
+{
+    uchar a;
+    if(row == 1) a = 0x80;
+    if(row == 2) a = 0xc0;
+    a = a + col - 1;
+    enable(a);
+    while(1)
+    {
+        if(*p == '\0') break;
+        write(*p);
+        p++;
+    }
+}
+
+void display()
+{
+    if(DA % 10000 / 1000 != 0)
+        L1602_char(1, 8, DA % 10000 / 1000 + 0x30);
+    else
+        L1602_char(1, 8, ' ');
+    if(DA % 10000 / 100 != 0)
+        L1602_char(1, 9, DA % 1000 / 100 + 0x30);
+    else
+        L1602_char(1, 9, ' ');
+    if(DA % 10000 / 10 != 0)
+        L1602_char(1, 10, DA % 100 / 10 + 0x30);
+    else
+        L1602_char(1, 10, ' ');
+    L1602_char(1, 11, DA % 10 + 0x30);
+
+    if(WARNING % 10000 / 1000 != 0)
+        L1602_char(2, 8, WARNING % 10000 / 1000 + 0x30);
+    else
+        L1602_char(2, 8, ' ');
+    if(WARNING % 10000 / 100 != 0)
+        L1602_char(2, 9, WARNING % 1000 / 100 + 0x30);
+    else
+        L1602_char(2, 9, ' ');
+    if(WARNING % 10000 / 10 != 0)
+        L1602_char(2, 10, WARNING % 100 / 10 + 0x30);
+    else
+        L1602_char(2, 10, ' ');
+    L1602_char(2, 11, WARNING % 10 + 0x30);
+    BUZZ = 1;  // Buzzer off
+}
+
+// Key function
+void Key()
+{
+    if(SET_KEY == 0) // If SET key is pressed
+    {
+        delay_ms(20);
+        if(SET_KEY == 0)
+        {
+            BUZZ = 0; // Buzzer on
+            setting_mode = !setting_mode; // Toggle setting mode
+            TR0 = !setting_mode; // Stop Timer0 in setting mode
+            if(setting_mode == 1)
+            {
+                enable(0x80 + 0x40 + 7);
+                if(WARNING % 10000 / 1000 != 0)
+                    write(WARNING % 10000 / 1000 + 0x30);
+                else
+                    write(' ');
+                if(WARNING % 10000 / 100 != 0)
+                    write(WARNING % 1000 / 100 + 0x30);
+                else
+                    write(' ');
+                if(WARNING % 10000 / 10 != 0)
+                    write(WARNING % 100 / 10 + 0x30);
+                else
+                    write(' ');
+                write(WARNING % 10 + 0x30);
+                enable(0x0f); // Display on, cursor blinking
+                enable(0x80 + 0x40 + 10); // Set cursor position
+            }
+            else
+            {
+                enable(0x0c); // Display on, cursor off
+            }
+            BUZZ = 1; // Buzzer off
+            while(SET_KEY == 0); // Wait for key release
+        }
+    }
+    if(ADD_KEY == 0 && setting_mode != 0) // ADD key in setting mode
+    {
+        delay_ms(20);
+        if(ADD_KEY == 0 && setting_mode != 0)
+        {
+            BUZZ = 0; // Buzzer on
+            WARNING += 10; // Increase threshold
+            if(WARNING >= 1000)
+                WARNING = 1000; // Limit threshold
+            enable(0x80 + 0x40 + 7);
+            if(WARNING % 10000 / 1000 != 0)
+                write(WARNING % 10000 / 1000 + 0x30);
+            else
+                write(' ');
+            if(WARNING % 10000 / 100 != 0)
+                write(WARNING % 1000 / 100 + 0x30);
+            else
+                write(' ');
+            if(WARNING % 10000 / 10 != 0)
+                write(WARNING % 100 / 10 + 0x30);
+            else
+                write(' ');
+            write(WARNING % 10 + 0x30);
+            enable(0x80 + 0x40 + 10); // Adjust position
+            BUZZ = 1; // Buzzer off
+//          write_eeprom(); // Save data
+        }
+        while(ADD_KEY == 0); // Wait for key release
+    }
+    if(SUB_KEY == 0 && setting_mode != 0) // SUB key in setting mode
+    {
+        delay_ms(20);
+        if(SUB_KEY == 0 && setting_mode != 0)
+        {
+            BUZZ = 0; // Buzzer on
+            WARNING -= 10; // Decrease threshold
+            if(WARNING < 10)
+                WARNING = 0; // Limit threshold
+            enable(0x80 + 0x40 + 7);
+            if(WARNING % 10000 / 1000 != 0)
+                write(WARNING % 10000 / 1000 + 0x30);
+            else
+                write(' ');
+            if(WARNING % 10000 / 100 != 0)
+                write(WARNING % 1000 / 100 + 0x30);
+            else
+                write(' ');
+            if(WARNING % 10000 / 10 != 0)
+                write(WARNING % 100 / 10 + 0x30);
+            else
+                write(' ');
+            write(WARNING % 10 + 0x30);
+            enable(0x80 + 0x40 + 10); // Adjust position
+            BUZZ = 1; // Buzzer off
+//          write_eeprom(); // Save data
+        }
+        while(SUB_KEY == 0); // Wait for key release
+    }
+}
+
+void ALARM()
+{
+    if(DA >= WARNING)
+    {
+        flag_Alarm = 1;
+        LED_RED = 0;
+        LED_YELLOW = 1;
+        LED_GREEN = 1;
+        RELAY = 0;
+    }
+    else
+    {
+        if(DA < WARNING && DA >= WARNING / 2)
+        {
+            LED_RED = 1;
+            LED_YELLOW = 0;
+            LED_GREEN = 1;
+            RELAY = 1;
+        }
+        else
+        {
+            LED_RED = 1;
+            LED_YELLOW = 1;
+            LED_GREEN = 0;
+            RELAY = 1;
+        }
+        flag_Alarm = 0;
+        BUZZ = 1;
+    }
+}
+
+/********************************************************************
+* Name : Main()
+* Function : Main function
+***********************************************************************/
+void main()
+{
+    uchar h;
+    uint sum;
+    EA = 0;
+    Timer0_Init();  // Timer0 initialization
+    EA = 1;
+    RW = 0;
+    L1602_init();
+    while(1)
+    {
+         if (FlagStartRH == 1 && setting_mode == 0) // PM2.5 conversion flag check
+         {
+            TR0 = 0;
+            for(h = 0; h < 50; h++)
+            {
+                DA = adc0832(0);
+                sum = sum + DA;
+                delay_ms(100);
+                Key();
+            }
+            DA = sum / 50;
+            sum = 0;
+            DA = DA * (float)(DA / 5);
+            ALARM();
+            if(setting_mode == 0)
+                display();
+            TR0 = 1;
+        }
+        Key();
+        ALARM();
+    }
+}

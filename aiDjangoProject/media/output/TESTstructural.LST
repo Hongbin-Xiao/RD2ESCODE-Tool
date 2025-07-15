@@ -1,0 +1,273 @@
+C51 COMPILER V9.59.0.0   TESTSTRUCTURAL                                                    07/10/2025 16:33:05 PAGE 1   
+
+
+C51 COMPILER V9.59.0.0, COMPILATION OF MODULE TESTSTRUCTURAL
+OBJECT MODULE PLACED IN C:/Users/12240/Desktop/ai-project/aiDjangoProject/media/output/TESTstructural.OBJ
+COMPILER INVOKED BY: D:\Keil_v5\C51\BIN\C51.exe C:/Users/12240/Desktop/ai-project/aiDjangoProject/media/output/TESTstruc
+                    -tural.c
+
+line level    source
+
+   1          #include <reg52.h>
+   2          #define uchar unsigned char
+   3          #define uint unsigned int
+   4          #define Tol 15
+   5          #define PCF8591 0x90
+   6          
+   7          sbit SCL = P1^1;
+   8          sbit SDA = P1^0;
+   9          sbit led_1 = P1^2;
+  10          sbit led_2 = P1^3;
+  11          sbit key_Up = P3^4;
+  12          sbit key_Down = P3^6;
+  13          sbit key_Left = P3^3;
+  14          sbit key_Right = P3^7;
+  15          sbit key_state = P3^5;
+  16          
+  17          uchar code FirstSet_FWD[] = {0x01,0x03,0x02,0x06,0x04,0x0c,0x08,0x09};
+  18          uchar code FirstSet_REV[] = {0x09,0x08,0x0c,0x04,0x06,0x02,0x03,0x01};
+  19          uchar code Secondset_FWD[] = {0x10,0x30,0x20,0x60,0x40,0xc0,0x80,0x90};
+  20          uchar code Secondset_REV[] = {0x90,0x80,0xc0,0x40,0x60,0x20,0x30,0x10};
+  21          
+  22          uint angle_X = 800, angle_Y = 800;
+  23          bit DIR_X, DIR_Y;
+  24          uchar loop, AD_Up, AD_Down, AD_Left, AD_Right, ms, blink_ms;
+  25          bit Up_CB, Down_CB, Left_CB, Right_CB, SYS_mode, SYS_ERROR;
+  26          
+  27          void PCF8591_Delay() {;}
+  28          
+  29          void start() {
+  30   1          SDA = 1; PCF8591_Delay();
+  31   1          SCL = 1; PCF8591_Delay();
+  32   1          SDA = 0; PCF8591_Delay();
+  33   1      }
+  34          
+  35          void stop() {
+  36   1          SDA = 0; PCF8591_Delay();
+  37   1          SCL = 1; PCF8591_Delay();
+  38   1          SDA = 1; PCF8591_Delay();
+  39   1      }
+  40          
+  41          void respons() {
+  42   1          uchar i = 0;
+  43   1          SCL = 1; PCF8591_Delay();
+  44   1          while ((SDA == 1) && (i < 250)) i++;
+  45   1          SCL = 0; PCF8591_Delay();
+  46   1      }
+  47          
+  48          void init() {
+  49   1          SDA = 1; PCF8591_Delay();
+  50   1          SCL = 1; PCF8591_Delay();
+  51   1      }
+  52          
+  53          uchar read_byte() {
+  54   1          uchar i, k = 0;
+C51 COMPILER V9.59.0.0   TESTSTRUCTURAL                                                    07/10/2025 16:33:05 PAGE 2   
+
+  55   1          SCL = 0; PCF8591_Delay();
+  56   1          SDA = 1; PCF8591_Delay();
+  57   1          for (i = 0; i < 8; i++) {
+  58   2              SCL = 1; PCF8591_Delay();
+  59   2              k = (k << 1) | SDA;
+  60   2              SCL = 0; PCF8591_Delay();
+  61   2          }
+  62   1          return k;
+  63   1      }
+  64          
+  65          void write_byte(uchar date) {
+  66   1          uchar i, temp;
+  67   1          temp = date;
+  68   1          for (i = 0; i < 8; i++) {
+  69   2              temp = temp << 1;
+  70   2              SCL = 0; PCF8591_Delay();
+  71   2              SDA = CY;
+  72   2              PCF8591_Delay();
+  73   2              SCL = 1; PCF8591_Delay();
+  74   2          }
+  75   1          SCL = 0; PCF8591_Delay();
+  76   1          SDA = 1; PCF8591_Delay();
+  77   1      }
+  78          
+  79          void write_add(uchar control, uchar date) {
+  80   1          start();
+  81   1          write_byte(PCF8591);
+  82   1          respons();
+  83   1          write_byte(control);
+  84   1          respons();
+  85   1          write_byte(date);
+  86   1          respons();
+  87   1          stop();
+  88   1      }
+  89          
+  90          uchar read_add(uchar control) {
+  91   1          uchar date;
+  92   1          start();
+  93   1          write_byte(PCF8591);
+  94   1          respons();
+  95   1          write_byte(control);
+  96   1          respons();
+  97   1          start();
+  98   1          write_byte(PCF8591 + 1);
+  99   1          respons();
+ 100   1          date = read_byte();
+ 101   1          stop();
+ 102   1          return date;
+ 103   1      }
+ 104          
+ 105          uchar DAC(uchar light) {
+ 106   1          start();
+ 107   1          write_byte(PCF8591);
+ 108   1          respons();
+ 109   1          write_byte(0x40);
+ 110   1          respons();
+ 111   1          write_byte(light);
+ 112   1          respons();
+ 113   1          stop();
+ 114   1          return 1;
+ 115   1      }
+ 116          
+C51 COMPILER V9.59.0.0   TESTSTRUCTURAL                                                    07/10/2025 16:33:05 PAGE 3   
+
+ 117          void delay(uint T) {
+ 118   1          while (T--);
+ 119   1      }
+ 120          
+ 121          void key() {
+ 122   1          if (!key_state) {
+ 123   2              delay(1000);
+ 124   2              if (!key_state) {
+ 125   3                  while (!key_state) Down_CB = Up_CB = Right_CB = Left_CB = 0;
+ 126   3                  SYS_mode = !SYS_mode;
+ 127   3                  angle_X = angle_Y = 800;
+ 128   3                  DIR_X = DIR_Y = 0;
+ 129   3              }
+ 130   2          }
+ 131   1      
+ 132   1          if (!SYS_mode) {
+ 133   2              if (!key_Up) {
+ 134   3                  Up_CB = 1; Down_CB = 0;
+ 135   3              } else if (!key_Down) {
+ 136   3                  Up_CB = 0; Down_CB = 1;
+ 137   3              } else {
+ 138   3                  Down_CB = 0; Up_CB = 0;
+ 139   3              }
+ 140   2      
+ 141   2              if (!key_Left) {
+ 142   3                  Left_CB = 1; Right_CB = 0;
+ 143   3              } else if (!key_Right) {
+ 144   3                  Left_CB = 0; Right_CB = 1;
+ 145   3              } else {
+ 146   3                  Right_CB = 0; Left_CB = 0;
+ 147   3              }
+ 148   2          }
+ 149   1      }
+ 150          
+ 151          void proc() {
+ 152   1          if (SYS_mode && SYS_ERROR == 0) {
+ 153   2              if (AD_Up > AD_Down) {
+ 154   3                  Up_CB = 0;
+ 155   3                  if (AD_Up - AD_Down >= Tol) Down_CB = 1;
+ 156   3                  else if (AD_Up - AD_Down <= 4) Down_CB = 0;
+ 157   3              } else {
+ 158   3                  Down_CB = 0;
+ 159   3                  if (AD_Down - AD_Up >= Tol) Up_CB = 1;
+ 160   3                  else if (AD_Down - AD_Up <= 4) Up_CB = 0;
+ 161   3              }
+ 162   2      
+ 163   2              if (AD_Left > AD_Right) {
+ 164   3                  Right_CB = 0;
+ 165   3                  if (AD_Left - AD_Right >= Tol) Left_CB = 1;
+ 166   3                  else if (AD_Left - AD_Right <= 7) Left_CB = 0;
+ 167   3              } else {
+ 168   3                  Left_CB = 0;
+ 169   3                  if (AD_Right - AD_Left >= Tol) Right_CB = 1;
+ 170   3                  else if (AD_Right - AD_Left <= 7) Right_CB = 0;
+ 171   3              }
+ 172   2          } else if (SYS_mode && SYS_ERROR) {
+ 173   2              Right_CB = Left_CB = Up_CB = Down_CB = 0;
+ 174   2          }
+ 175   1      }
+ 176          
+ 177          void main(void) {
+ 178   1          TMOD = 0x01;
+C51 COMPILER V9.59.0.0   TESTSTRUCTURAL                                                    07/10/2025 16:33:05 PAGE 4   
+
+ 179   1          TH0 = 0xf6;
+ 180   1          TL0 = 0x3b;
+ 181   1          EA = 1;
+ 182   1          ET0 = 1;
+ 183   1          TR0 = 1;
+ 184   1          init();
+ 185   1      
+ 186   1          while (1) {
+ 187   2              key();
+ 188   2              AD_Down = read_add(0x00);
+ 189   2              AD_Up = read_add(0x01);
+ 190   2              AD_Right = read_add(0x02);
+ 191   2              AD_Left = read_add(0x03);
+ 192   2      
+ 193   2              if (AD_Down == 255 || AD_Down == 0 || AD_Up == 255 || AD_Up == 0 || AD_Right == 255 || AD_Right ==
+             - 0 || AD_Left == 255 || AD_Left == 0) {
+ 194   3                  SYS_ERROR = 1;
+ 195   3              } else {
+ 196   3                  SYS_ERROR = 0;
+ 197   3              }
+ 198   2      
+ 199   2              proc();
+ 200   2              if (SYS_ERROR == 0) {
+ 201   3                  if (!SYS_mode) {
+ 202   4                      led_1 = 0; led_2 = 1;
+ 203   4                  } else {
+ 204   4                      led_1 = 1; led_2 = 0;
+ 205   4                  }
+ 206   3              }
+ 207   2          }
+ 208   1      }
+ 209          
+ 210          void init_1() interrupt 1 {
+ 211   1          TH0 = 0xf6;
+ 212   1          TL0 = 0x3b;
+ 213   1      
+ 214   1          if (Up_CB) {
+ 215   2              P2 = P2 & 0xf0 | FirstSet_FWD[loop];
+ 216   2          } else if (Down_CB) {
+ 217   2              P2 = P2 & 0xf0 | FirstSet_REV[loop];
+ 218   2          } else {
+ 219   2              P2 = P2 & 0xf0;
+ 220   2          }
+ 221   1      
+ 222   1          if (Left_CB) {
+ 223   2              P2 = P2 & 0x0f | Secondset_FWD[loop];
+ 224   2          } else if (Right_CB) {
+ 225   2              P2 = P2 & 0x0f | Secondset_REV[loop];
+ 226   2          } else {
+ 227   2              P2 = P2 & 0x0f;
+ 228   2          }
+ 229   1      
+ 230   1          loop = (loop + 1) % 8;
+ 231   1      
+ 232   1          if (SYS_ERROR == 1) {
+ 233   2              blink_ms++;
+ 234   2              if (blink_ms > 39) {
+ 235   3                  blink_ms = 0;
+ 236   3                  led_1 = !led_1;
+ 237   3                  led_2 = led_1;
+ 238   3              }
+ 239   2          }
+C51 COMPILER V9.59.0.0   TESTSTRUCTURAL                                                    07/10/2025 16:33:05 PAGE 5   
+
+ 240   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    781    ----
+   CONSTANT SIZE    =     32    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =     11    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =      8    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

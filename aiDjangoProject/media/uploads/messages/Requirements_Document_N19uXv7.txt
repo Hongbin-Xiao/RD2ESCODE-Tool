@@ -1,0 +1,115 @@
+# PM2.5 Air Quality Monitoring System Requirements Document
+
+## 1. System Overview
+
+This system is designed based on the 51 microcontroller to achieve real-time monitoring and alarm functions for PM2.5 concentration. The system collects sensor data via ADC0832, displays concentration values and alarm thresholds on an LCD1602, and provides three-level LED indication, buzzer alarm, and relay control according to concentration levels.
+
+### Main Functions:
+- Real-time detection and display of PM2.5 concentration
+- User-adjustable alarm threshold setting
+- Three-level LED status indication
+- Buzzer alarm and relay action when exceeding the threshold
+
+## 2. Functional Module Requirements
+
+### 2.1 Data Acquisition Module
+Uses ADC0832 to read the analog signal from the PM2.5 sensor through channel 0. The system collects data every 2 seconds, taking 50 samples each time and calculating the average value to improve accuracy.
+
+The acquired raw ADC value is converted to PM2.5 concentration by a simple linear transformation:  
+`PM25_Value = (Average ADC value) × 2`
+
+### 2.2 Display Module
+LCD1602 displays two lines of information:
+- First line: " PM2.5:    XXX ug/m3"
+- Second line: " ALARM:   XXX ug/m3"
+
+When displaying values with less than 4 digits, leading spaces are used instead of zeros.
+
+### 2.3 Button Interaction Module
+Three buttons enable user interaction:
+
+**SET_KEY (P3^4):** Switches between normal mode and setting mode
+- Press to enter setting mode; LCD shows cursor, Timer 0 stops
+- Press again to exit setting mode, save settings, and resume normal display
+
+**ADD_KEY (P3^5):** Only valid in setting mode
+- Each press increases WARNING value by 10
+- Maximum is 1000
+
+**SUB_KEY (P3^6):** Only valid in setting mode
+- Each press decreases WARNING value by 10
+- Minimum is 0 (in actual code, set to 0 if less than 10)
+
+All button operations have a 20ms debounce delay and a buzzer confirmation sound.
+
+### 2.4 Alarm and Control Module
+The system provides three-level indication according to the relationship between PM2.5 concentration and alarm threshold:
+
+**Severe Pollution** (PM25_Value ≥ WARNING):
+- Red LED on, yellow and green LEDs off
+- Relay closed (JDQ = 0)
+- Buzzer sounds intermittently at 1Hz
+- Set alarm flag flag_BJ = 1
+
+**Moderate Pollution** (WARNING/2 ≤ PM25_Value < WARNING):
+- Yellow LED on, red and green LEDs off
+- Relay open (JDQ = 1)
+- Buzzer silent
+
+**Good Air Quality** (PM25_Value < WARNING/2):
+- Green LED on, red and yellow LEDs off
+- Relay open (JDQ = 1)
+- Buzzer silent
+
+## 3. Hardware Interface Definitions
+
+### 3.1 LCD1602 Interface
+- RS = P2^7 (Register select)
+- RW = P2^5 (Read/Write control, fixed to write mode)
+- E = P2^6 (Enable signal)
+- Data bus = P0
+
+### 3.2 ADC0832 Interface
+- CS = P1^3 (Chip select)
+- CLK = P1^0 (Clock)
+- DIO = P1^1 (Data input/output)
+
+### 3.3 User Interface
+- SET_KEY = P3^4
+- ADD_KEY = P3^5
+- SUB_KEY = P3^6
+- BUZZ = P3^7 (Buzzer, low level sounds)
+
+### 3.4 Indication and Control Interface
+- LED_RED = P2^2 (Lights up at low level)
+- LED_YELLOW = P2^1 (Lights up at low level)
+- LED_GREEN = P2^0 (Lights up at low level)
+- JDQ = P2^4 (Relay, closes at low level)
+
+## 4. System Timing Control
+
+### 4.1 Timer Configuration
+- Timer 0: TH0=0x3c, TL0=0xb0, controls sampling timing; triggers sampling flag every 20 interrupts (about 2 seconds)
+- Timer 1: TH1=0x3c, TL1=0xb0, controls buzzer alarm rhythm; toggles buzzer state every 10 interrupts
+
+### 4.2 Workflow
+1. System initialization: LCD initialization, timer configuration, display initial interface
+2. Main loop:
+   - Check sampling flag, perform PM2.5 detection
+   - Button scan and processing
+   - Alarm status processing
+3. Interrupt service: Timer interrupt controls sampling timing and alarm rhythm
+
+## 5. System Parameters
+
+### 5.1 Default Settings
+- Initial alarm threshold: 200 ug/m³
+- Sampling period: 2 seconds
+- Sampling count: 50 times average
+- Button debounce time: 20ms
+
+### 5.2 User Adjustable Parameters
+- Alarm threshold range: 0-1000 ug/m³
+- Adjustment step: 10 ug/m³
+
+---

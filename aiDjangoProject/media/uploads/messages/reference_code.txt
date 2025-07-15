@@ -1,0 +1,486 @@
+#include <reg52.h>
+#include <intrins.h>
+
+/* ================ Type Definitions ================ */
+typedef unsigned char uchar;
+typedef unsigned int uint;
+
+/* ================ Hardware Port Definitions ================ */
+// LCD1602 Ports
+sbit LCD_E = P2^6;
+sbit LCD_RS = P2^7;
+sbit LCD_RW = P2^5;
+
+// LED and Control Ports
+sbit LED_RED = P2^2;
+sbit LED_YELLOW = P2^1;
+sbit LED_GREEN = P2^0;
+sbit SET_KEY = P3^4;
+sbit ADD_KEY = P3^5;
+sbit SUB_KEY = P3^6;
+sbit BUZZER = P3^7;
+sbit RELAY = P2^4;
+
+// ADC0832 Ports
+sbit ADC_CS = P1^3;
+sbit ADC_CLK = P1^0;
+sbit ADC_DIO = P1^1;
+
+/* ================ Global Variables ================ */
+uint PM25_Value = 0;       // PM2.5 concentration value
+uint ALARM_THRESHOLD = 200; // Alarm threshold
+bit FlagStartPM25 = 0;     // PM2.5 detection flag
+bit flag_Alarm = 0;        // Alarm flag
+bit setting_mode = 0;      // Setting mode flag
+
+/* ================ Function Declarations ================ */
+void delay(void);
+void delay_ms(uint);
+void LCD_SendCommand(uchar);
+void LCD_SendData(uchar);
+void LCD_Init(void);
+void LCD_DisplayValue(void);
+uchar ADC_ReadChannel(uchar);
+void KEY_Scan(void);
+void ALARM_Process(void);
+void TIMER_Init(void);
+
+/* ================ Basic Utility Functions ================ */
+// Short delay function
+void delay(void)
+{
+    int i, j;
+    for(i = 0; i <= 10; i++)
+        for(j = 0; j <= 2; j++);
+}
+
+// Millisecond delay function
+void delay_ms(uint ms)
+{
+    uint i, j;
+    for(i = 0; i < ms; i++)
+        for(j = 0; j < 110; j++);
+}
+
+/* ================ LCD1602 Module ================ */
+// Send command to LCD
+void LCD_SendCommand(uchar command)
+{
+    P0 = command;
+    LCD_RS = 0;
+    LCD_E = 1;
+    delay();
+    LCD_E = 0;
+    delay();
+}
+
+// Send data to LCD
+void LCD_SendData(uchar value)
+{
+    P0 = value;
+    LCD_RS = 1;
+    LCD_E = 1;
+    delay();
+    LCD_E = 0;
+    delay();
+}
+
+// LCD initialization
+void LCD_Init(void)
+{
+    LCD_SendCommand(0x38);  // 16*2 display, 5*7 dots, 8-bit interface
+    LCD_SendCommand(0x0c);  // Display on, cursor off
+    LCD_SendCommand(0x06);  // Address increments after writing
+    LCD_SendCommand(0x01);  // Clear screen
+    LCD_SendCommand(0x80);  // Set address pointer
+
+    // Display initial interface
+    LCD_SendCommand(0x80);
+    LCD_SendData(' ');
+    LCD_SendData('P');
+    LCD_SendData('M');
+    LCD_SendData('2');
+    LCD_SendData('.');
+    LCD_SendData('5');
+    LCD_SendData(':');
+    LCD_SendData(' ');
+    LCD_SendData(' ');
+    LCD_SendData(' ');
+    LCD_SendData(' ');
+    LCD_SendData('u');
+    LCD_SendData('g');
+    LCD_SendData('/');
+    LCD_SendData('m');
+    LCD_SendData('3');
+
+    LCD_SendCommand(0x80 + 0x40);
+    LCD_SendData(' ');
+    LCD_SendData('A');
+    LCD_SendData('L');
+    LCD_SendData('A');
+    LCD_SendData('R');
+    LCD_SendData('M');
+    LCD_SendData(':');
+    LCD_SendData(' ');
+    LCD_SendData(' ');
+    LCD_SendData(' ');
+    LCD_SendData(' ');
+    LCD_SendData('u');
+    LCD_SendData('g');
+    LCD_SendData('/');
+    LCD_SendData('m');
+    LCD_SendData('3');
+}
+
+// Display PM2.5 concentration and alarm threshold
+void LCD_DisplayValue(void)
+{
+    // Display PM2.5 concentration
+    LCD_SendCommand(0x80 + 7);
+    if(PM25_Value % 10000 / 1000 != 0)
+        LCD_SendData(PM25_Value % 10000 / 1000 + '0');
+    else
+        LCD_SendData(' ');
+    if(PM25_Value % 10000 / 100 != 0)
+        LCD_SendData(PM25_Value % 1000 / 100 + '0');
+    else
+        LCD_SendData(' ');
+    if(PM25_Value % 10000 / 10 != 0)
+        LCD_SendData(PM25_Value % 100 / 10 + '0');
+    else
+        LCD_SendData(' ');
+    LCD_SendData(PM25_Value % 10 + '0');
+
+    // Display alarm threshold
+    LCD_SendCommand(0x80 + 0x40 + 7);
+    if(ALARM_THRESHOLD % 10000 / 1000 != 0)
+        LCD_SendData(ALARM_THRESHOLD % 10000 / 1000 + '0');
+    else
+        LCD_SendData(' ');
+    if(ALARM_THRESHOLD % 10000 / 100 != 0)
+        LCD_SendData(ALARM_THRESHOLD % 1000 / 100 + '0');
+    else
+        LCD_SendData(' ');
+    if(ALARM_THRESHOLD % 10000 / 10 != 0)
+        LCD_SendData(ALARM_THRESHOLD % 100 / 10 + '0');
+    else
+        LCD_SendData(' ');
+    LCD_SendData(ALARM_THRESHOLD % 10 + '0');
+}
+
+/* ================ ADC0832 Module ================ */
+// Read value from specified ADC0832 channel
+uchar ADC_ReadChannel(uchar channel)
+{
+    uchar i;
+    uchar test;
+    uchar adval;
+
+    adval = 0x00;
+    test = 0x00;
+    ADC_CLK = 0;       // Initialize
+    ADC_DIO = 1;
+    _nop_();
+    ADC_CS = 0;
+    _nop_();
+    ADC_CLK = 1;
+    _nop_();
+
+    if(channel == 0x00)      // Channel selection
+    {
+        ADC_CLK = 0;
+        ADC_DIO = 1;      // First bit for channel 0
+        _nop_();
+        ADC_CLK = 1;
+        _nop_();
+        ADC_CLK = 0;
+        ADC_DIO = 0;      // Second bit for channel 0
+        _nop_();
+        ADC_CLK = 1;
+        _nop_();
+    } 
+    else
+    {
+        ADC_CLK = 0;
+        ADC_DIO = 1;      // First bit for channel 1
+        _nop_();
+        ADC_CLK = 1;
+        _nop_();
+        ADC_CLK = 0;
+        ADC_DIO = 1;      // Second bit for channel 1
+        _nop_();
+        ADC_CLK = 1;
+        _nop_();
+    }
+
+    ADC_CLK = 0;
+    ADC_DIO = 1;
+    for(i = 0; i < 8; i++)      // Read first 8 bits
+    {
+        _nop_();
+        adval <<= 1;
+        ADC_CLK = 1;
+        _nop_();
+        ADC_CLK = 0;
+        if(ADC_DIO)
+            adval |= 0x01;
+        else
+            adval |= 0x00;
+    }
+    for(i = 0; i < 8; i++)      // Read last 8 bits
+    {
+        test >>= 1;
+        if(ADC_DIO)
+            test |= 0x80;
+        else 
+            test |= 0x00;
+        _nop_();
+        ADC_CLK = 1;
+        _nop_();
+        ADC_CLK = 0;
+    }
+
+    _nop_();
+    ADC_CS = 1;        // Release ADC0832
+    ADC_DIO = 1;
+    ADC_CLK = 1;
+    return adval;
+}
+
+/* ================ Key Module ================ */
+// Key scan and processing
+void KEY_Scan(void)
+{
+    // SET key processing
+    if(SET_KEY == 0)
+    {
+        delay_ms(20);  // Debounce
+        if(SET_KEY == 0)
+        {
+            BUZZER = 0;    // Short beep
+            setting_mode = !setting_mode;  // Switch setting mode
+            TR0 = !setting_mode;  // Disable timer0 in setting mode
+
+            if(setting_mode == 1)  // Enter setting mode
+            {
+                // Display current threshold and show cursor
+                LCD_SendCommand(0x80 + 0x40 + 7);
+                if(ALARM_THRESHOLD % 10000 / 1000 != 0)
+                    LCD_SendData(ALARM_THRESHOLD % 10000 / 1000 + '0');
+                else
+                    LCD_SendData(' ');
+                if(ALARM_THRESHOLD % 10000 / 100 != 0)
+                    LCD_SendData(ALARM_THRESHOLD % 1000 / 100 + '0');
+                else
+                    LCD_SendData(' ');
+                if(ALARM_THRESHOLD % 10000 / 10 != 0)
+                    LCD_SendData(ALARM_THRESHOLD % 100 / 10 + '0');
+                else
+                    LCD_SendData(' ');
+                LCD_SendData(ALARM_THRESHOLD % 10 + '0');
+                LCD_SendCommand(0x0f);  // Cursor on
+                LCD_SendCommand(0x80 + 0x40 + 10);  // Set cursor position
+            }
+            else  // Exit setting mode
+            {
+                LCD_SendCommand(0x0c);  // Cursor off
+            }
+
+            BUZZER = 1;  // Turn off buzzer
+            while(SET_KEY == 0);  // Wait for key release
+        }
+    }
+
+    // ADD key processing
+    if(ADD_KEY == 0 && setting_mode != 0)
+    {
+        delay_ms(20);  // Debounce
+        if(ADD_KEY == 0 && setting_mode != 0)
+        {
+            BUZZER = 0;    // Short beep
+            ALARM_THRESHOLD += 10;  // Increase threshold by 10
+            if(ALARM_THRESHOLD >= 1000)  // Limit max value
+                ALARM_THRESHOLD = 1000;
+
+            // Update display
+            LCD_SendCommand(0x80 + 0x40 + 7);
+            if(ALARM_THRESHOLD % 10000 / 1000 != 0)
+                LCD_SendData(ALARM_THRESHOLD % 10000 / 1000 + '0');
+            else
+                LCD_SendData(' ');
+            if(ALARM_THRESHOLD % 10000 / 100 != 0)
+                LCD_SendData(ALARM_THRESHOLD % 1000 / 100 + '0');
+            else
+                LCD_SendData(' ');
+            if(ALARM_THRESHOLD % 10000 / 10 != 0)
+                LCD_SendData(ALARM_THRESHOLD % 100 / 10 + '0');
+            else
+                LCD_SendData(' ');
+            LCD_SendData(ALARM_THRESHOLD % 10 + '0');
+            LCD_SendCommand(0x80 + 0x40 + 10);  // Reset cursor position
+
+            BUZZER = 1;  // Turn off buzzer
+        }
+        while(ADD_KEY == 0);  // Wait for key release
+    }
+
+    // SUB key processing
+    if(SUB_KEY == 0 && setting_mode != 0)
+    {
+        delay_ms(20);  // Debounce
+        if(SUB_KEY == 0 && setting_mode != 0)
+        {
+            BUZZER = 0;    // Short beep
+            ALARM_THRESHOLD -= 10;  // Decrease threshold by 10
+            if(ALARM_THRESHOLD < 10)  // Limit min value
+                ALARM_THRESHOLD = 0;
+
+            // Update display
+            LCD_SendCommand(0x80 + 0x40 + 7);
+            if(ALARM_THRESHOLD % 10000 / 1000 != 0)
+                LCD_SendData(ALARM_THRESHOLD % 10000 / 1000 + '0');
+            else
+                LCD_SendData(' ');
+            if(ALARM_THRESHOLD % 10000 / 100 != 0)
+                LCD_SendData(ALARM_THRESHOLD % 1000 / 100 + '0');
+            else
+                LCD_SendData(' ');
+            if(ALARM_THRESHOLD % 10000 / 10 != 0)
+                LCD_SendData(ALARM_THRESHOLD % 100 / 10 + '0');
+            else
+                LCD_SendData(' ');
+            LCD_SendData(ALARM_THRESHOLD % 10 + '0');
+            LCD_SendCommand(0x80 + 0x40 + 10);  // Reset cursor position
+
+            BUZZER = 1;  // Turn off buzzer
+        }
+        while(SUB_KEY == 0);  // Wait for key release
+    }
+}
+
+/* ================ Alarm Control Module ================ */
+// Alarm processing
+void ALARM_Process(void)
+{
+    if(PM25_Value >= ALARM_THRESHOLD)  // PM2.5 exceeds alarm threshold
+    {
+        flag_Alarm = 1;  // Set alarm flag
+        LED_RED = 0;     // Red LED on
+        LED_YELLOW = 1;
+        LED_GREEN = 1;
+        RELAY = 0;       // Relay closed
+    }
+    else
+    {
+        if(PM25_Value < ALARM_THRESHOLD && PM25_Value >= ALARM_THRESHOLD / 2)  // Between 50%-100% threshold
+        {
+            LED_RED = 1;
+            LED_YELLOW = 0;  // Yellow LED on
+            LED_GREEN = 1;
+            RELAY = 1;       // Relay open
+        }
+        else  // Below 50% threshold
+        {
+            LED_RED = 1;
+            LED_YELLOW = 1;
+            LED_GREEN = 0;  // Green LED on
+            RELAY = 1;      // Relay open
+        }
+        flag_Alarm = 0;  // Clear alarm flag
+        BUZZER = 1;      // Turn off buzzer
+    }
+}
+
+/* ================ Timer Module ================ */
+// Timer initialization
+void TIMER_Init(void)
+{
+    ET0 = 1;        // Enable timer0 interrupt
+    TMOD = 0x11;    // Timer mode selection
+    TL0 = 0xb0;     
+    TH0 = 0x3c;     // Timer initial value
+    TR0 = 1;        // Start timer0
+    TL1 = 0xb0;     
+    TH1 = 0x3c;     // Timer initial value
+    ET1 = 1;
+    TR1 = 1;
+}
+
+// Timer0 interrupt service routine
+void Timer0_ISR(void) interrupt 1 using 0
+{
+    static uchar PM25Counter = 0;
+    TL0 = 0xb0;
+    TH0 = 0x3c;     // Timer initial value
+    PM25Counter++;
+    // PM2.5 detection every 2 seconds
+    if(PM25Counter >= 20)
+    {
+       FlagStartPM25 = 1;
+       PM25Counter = 0;
+    }
+}
+
+// Timer1 interrupt service routine
+void Timer1_ISR(void) interrupt 3
+{
+    static uchar AlarmCounter = 0;
+    TL1 = 0xb0;
+    TH1 = 0x3c;     // Timer initial value
+    AlarmCounter++;
+    if(AlarmCounter >= 10)
+    {
+        AlarmCounter = 0;
+        if(flag_Alarm == 1)
+            BUZZER = !BUZZER;  // 1Hz buzzer
+        else
+            BUZZER = 1;        // Buzzer off
+    }
+}
+
+/* ================ Main Function ================ */
+void main(void)
+{
+    uchar i;
+    uint sum;
+
+    EA = 0;  // Disable global interrupt
+    TIMER_Init();  // Timer initialization
+    EA = 1;  // Enable global interrupt
+    LCD_RW = 0;  // LCD1602 write mode
+    LCD_Init();  // LCD1602 initialization
+
+    while(1)
+    {
+        if(FlagStartPM25 == 1 && setting_mode == 0)  // PM2.5 detection when not in setting mode
+        {
+            TR0 = 0;  // Pause timer0
+            sum = 0;
+
+            // Collect 50 ADC samples and average
+            for(i = 0; i < 50; i++)
+            {
+                sum += ADC_ReadChannel(0);  // Read ADC channel 0
+                delay_ms(1);  // Short delay
+                KEY_Scan();   // Key scan
+            }
+
+            PM25_Value = sum / 50;  // Calculate average
+
+            // PM2.5 concentration conversion (adjust as per sensor)
+            // Here is a simple linear relation, should be calibrated
+            PM25_Value = PM25_Value * 2;  // Simplified conversion
+
+            ALARM_Process();  // Check for alarm
+
+            if(setting_mode == 0)
+                LCD_DisplayValue();  // Update display
+
+            TR0 = 1;  // Resume timer0
+            FlagStartPM25 = 0;  // Clear detection flag
+        }
+
+        KEY_Scan();      // Key scan
+        ALARM_Process(); // Alarm check
+    }
+}
