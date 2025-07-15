@@ -11,9 +11,9 @@ RD2ESCODE is an innovative LLM-based tool that automatically transforms requirem
 
 ```
 RD2ESCODE-Tool/
-├── aiDjangoProject/          # 工具后端 (Tool Backend) 
-├── project/                  # 工具前端 (Tool Frontend)
-└── RD2ESCODE-EVALUATION/     # 工具评估 (Tool Evaluation)
+├── aiDjangoProject/          # Tool Backend
+├── project/                  # Tool Frontend
+└── RD2ESCODE-EVALUATION/     # Tool Evaluation
 ```
 ## ✨ Key Features
 
